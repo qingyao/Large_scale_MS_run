@@ -1,0 +1,27 @@
+# compute score
+## by the month folder
+import os
+from paxdb import scores
+
+month = '202502'
+paxdb_ver = 'v6.0'
+string_ver = 'v12.0'
+links_folder = f'rsc/{paxdb_ver}/links'
+interaction_fn_template = '{}.network_'+ string_ver + '_900.txt'
+
+for r, _, fs in os.walk(os.path.join(month, 'converted')):
+    for f in fs:
+        if f.endswith('.abu'):
+            taxID = r.split(os.path.sep)[-1]
+            out_fn = os.path.splitext(f)[0] + '.score'
+            out_fp = os.path.join(r,out_fn)
+            in_fp = os.path.join(r, f)
+            
+            if os.path.isfile(out_fp):
+                if os.path.getmtime(out_fp) > os.path.getmtime(in_fp):
+                    print(f, 'score has been computed.')
+                    continue
+            
+            scores.score_dataset(in_fp, 
+                                 out_fp, 
+                                 os.path.join(links_folder, interaction_fn_template.format(taxID)))

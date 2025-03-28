@@ -1,0 +1,12 @@
+# Large scale workflow to process public MS data
+ - LLM model based project filter
+ - string alignment and clustering for file name grouping
+ - download fastap based on taxID in metadata
+ - generate manifest with file-group relation
+    - run fragpipe
+    - check results
+    - edit manifest and iterate
+ - for successfully processed files, re-name group label, match tissue/organ into ontology terms
+ - convert the peptide intensity to whole-proteome ppm 
+ - compute interaction score
+ - book-keeping of filtered, processed, evaluated projects

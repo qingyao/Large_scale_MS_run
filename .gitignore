@@ -1,0 +1,7 @@
+rsc/
+initial_test/
+fragpipe/
+[0-9]*/
+
+Notes.md
+__pycache__
