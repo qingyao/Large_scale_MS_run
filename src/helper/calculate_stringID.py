@@ -1,11 +1,14 @@
 ## calculate molecular weight from string ID
 ## input [stringIDs,]
 ## output [MWs,]
-import os, re
+import os, re, yaml
 from pathlib import Path
 
-string_version = 'v12.0'
-paxdb_version = 'v6.0'
+with open('../rsc/config.yaml') as f:
+    config = yaml.safe_load(f)
+
+paxdb_ver = config['PaxDbVersion']
+string_ver = config['StringVersion']
 
 fp = Path(__file__).parent.parent.parent / 'rsc' / 'aa_mw_table.tsv'
 aa_mw = {}
@@ -18,7 +21,7 @@ def get_species(input_ids):
     return input_ids[0].split('.')[0]
 
 def get_fasta_fn(species_id):
-    fn = Path(__file__).parent.parent.parent /'rsc' / paxdb_version / 'fasta' / f'fasta.{string_version}.{species_id}.fa'
+    fn = Path(__file__).parent.parent.parent /'rsc' / paxdb_ver / 'fasta' / f'fasta.{string_ver}.{species_id}.fa'
     return str(fn)
 
 def get_sequence(input_ids):

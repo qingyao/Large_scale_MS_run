@@ -2,19 +2,36 @@
 ## check if data scope is ok.
 ## input new filename and tissue assignment
 ## 
-## by the month folder
-import os, yaml, glob, shutil, requests
+## by the year_month_folder folder
+import os, yaml, glob, shutil, requests, sys, json
 import subprocess as sbp
 from collections import defaultdict
 
-month = '202502'
-paxdb_ver = 'v6.0'
-string_ver = 'v12.0'
-pxd_info_file = '../shared/all_until_2024Jun03.tsv'
-pxd_pmid_map_file = '../shared/PXDID_PMID_doi.map'
-pmid_text_file = '../shared/result-allpxd.tsv'
-tissue_terms = f'rsc/{paxdb_ver}/ontology_terms.tsv'
-taxID_name_file = f'rsc/{paxdb_ver}/species.{string_ver}.txt' 
+year_month_folder = sys.argv[1]
+
+with open('../rsc/config.yaml') as f:
+    config = yaml.safe_load(f)
+
+paxdb_ver = config['PaxDbVersion']
+paxdb_ver_prev = config['PaxDbVersionPrev']
+string_ver = config['StringVersion']
+
+with open(f'../rsc/{paxdb_ver_prev}/species.json') as f:
+    paxdb_prev_data_info = json.load(f)
+
+with open(f'../{year_month_folder}/taxID_mapped_final.yaml') as f:
+    taxID_mapper = yaml.safe_load(f)
+
+newtaxID_old = {}
+for old, new in taxID_mapper.items():
+    newtaxID_old[new] = old
+
+pxd_info_file = '../../shared/all_until_2024Jun03.tsv'
+pxd_pmid_map_file = '../../shared/PXDID_PMID_doi.map'
+pmid_text_file = '../../shared/result-allpxd.tsv'
+tissue_terms = f'../rsc/{paxdb_ver}/ontology_terms.tsv'
+new_tissue_terms = f'../rsc/{paxdb_ver}/new_ontology_terms.tsv'
+taxID_name_file = f'../rsc/{paxdb_ver}/species.{string_ver}.txt' 
 
 pxd_pmid = {}
 with open(pxd_pmid_map_file) as f:
@@ -31,7 +48,10 @@ available_tissues = set()
 with open(tissue_terms) as f:
     for l in f:
         available_tissues.add(l.split('\t')[1])
-
+with open(new_tissue_terms) as f:
+    for l in f:
+        available_tissues.add(l.split('\t')[1])
+        
 taxID_name = {}
 with open(taxID_name_file) as f:
     next(f)
@@ -40,7 +60,7 @@ with open(taxID_name_file) as f:
         taxID_name[taxID] = name
         
 
-root_folder = os.path.join(month, 'fragpipe_processing_output')
+root_folder = os.path.join(os.path.pardir, year_month_folder, 'fragpipe_processing_output')
 for pxdid in os.listdir(root_folder):
     if not pxdid.startswith('PXD'):
         continue
@@ -53,7 +73,7 @@ for pxdid in os.listdir(root_folder):
             taxIDs.add(taxID)
     
     else:
-        print(pxdid, 'No manifest file.')
+        # print(pxdid, 'No manifest file.')
         continue
     if len(taxIDs) > 1:
         multi_taxID_flag = True
@@ -89,10 +109,19 @@ for pxdid in os.listdir(root_folder):
             res = sbp.run(['wc', '-l', os.path.join(root_folder, pxdid, taxID, 'combined_protein.tsv')], capture_output=True)
             protein_count = res.stdout.decode().strip().split()[0]
             if int(protein_count) < 500:
-                print(pxdid, protein_count, 'proteins: too few\n')
+                print(pxdid, protein_count, 'proteins: too few')
                 continue
             else:
-                print(pxdid, protein_count, 'proteins\n')
+                print(pxdid, protein_count, 'proteins')
+            print()
+            print('taxID:', taxID, 'Name:', taxID_name[taxID])
+            if taxID in paxdb_prev_data_info or taxID in newtaxID_old and newtaxID_old[taxID] in paxdb_prev_data_info:
+                taxID_to_check = taxID if taxID in paxdb_prev_data_info else newtaxID_old[taxID]
+                no_ds = len(paxdb_prev_data_info[taxID_to_check]['datasets'])
+                highest_score = sorted(paxdb_prev_data_info[taxID_to_check]['datasets'], key = lambda x: x['score'], reverse = True)[0]['score']
+                print(f'This species exist with {no_ds} datasets and highest score {highest_score}.')
+            else:
+                print('This is potentially a new species for PaxDb')
         else:
             print(pxdid, 'No protein results\n')
             continue
@@ -113,9 +142,12 @@ for pxdid in os.listdir(root_folder):
             print('No paper found')
         print()
         
+        for g, fnames in group_files.items():
+            print(g, fnames[0])
+        
         if os.path.isfile(scope_file):
             with open(scope_file) as f:
-                scope = f.read().strip()
+                scope = f.readline().strip()
                 
             if scope == 'False':
                 print(pxdid, 'Data scope was checked negative.')
@@ -126,8 +158,11 @@ for pxdid in os.listdir(root_folder):
             
             if scope_txt == 'N':
                 scope = False
+                scope_reason = input('Reason to exclude: [Return for nothing]')
                 with open(os.path.join(root_folder, pxdid, 'scope.flag'), 'w') as wf:
                     print('False', file = wf)
+                    if scope_reason.strip():
+                        print(scope_reason.strip(), file = wf)
                 continue
             else:
                 scope = True
@@ -201,30 +236,35 @@ for pxdid in os.listdir(root_folder):
                 tissue = 'WHOLE_ORGANISM'
             if not tissue in available_tissues:
                 new_tissue_pxd[tissue].append(pxdid + ':' + group_label)
+                ontologyID = input('New tissue, Ontology ID: ')
+                available_tissues.add(tissue)
+                with open(new_tissue_terms, 'a') as wf:
+                    print(ontologyID, tissue, sep='\t', file = wf)
+            
             label_tissue_mapper[group_label] = tissue
             
         with open(os.path.join(root_folder, pxdid, taxID, 'label_tissue.yaml'), 'w') as wf:
             yaml.dump(label_tissue_mapper, wf)
         
         if len(new_tissue_pxd) > 0:
-            new_tissue_file =os.path.join(month, 'new_tissue.yaml')
+            new_tissue_file =os.path.join(os.path.pardir, year_month_folder, 'new_tissue.yaml')
             if os.path.isfile(new_tissue_file):
                 with open(new_tissue_file) as f:
                     existing_yaml = yaml.safe_load(f)
                 for tissue, id_lists in existing_yaml.items():
                     new_tissue_pxd[tissue].extend(id_lists)
-            with open(os.path.join(month, 'new_tissue.yaml'), 'w') as wf:
-                yaml.dump(new_tissue_pxd, wf)
+            with open(os.path.join(os.path.pardir, year_month_folder, 'new_tissue.yaml'), 'w') as wf:
+                yaml.dump(dict(new_tissue_pxd), wf)
 
-        # for i in range(10):
-        print()
-        print()
-        print()
-        print()
-        print()
-        print()
-        print()
-        print()
-        print()
+    # for i in range(10):
+    print()
+    print()
+    print()
+    print()
+    print()
+    print()
+    print()
+    print()
+    print()
         
         

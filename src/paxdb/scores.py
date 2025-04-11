@@ -110,15 +110,17 @@ class DatasetSorter():
 
 
 if __name__ == "__main__":
-    from paxdb.config import PaxDbConfig
+    
+    with open('../../rsc/config.yaml') as f:
+        config = yaml.safe_load(f)
 
-    cfg = PaxDbConfig()
+    paxdb_version = config['PaxDbVersion']
 
     s = DatasetSorter()
-    for species in os.listdir('../../output/' + cfg.paxdb_version):
+    for species in os.listdir('../../202502/converted/'):
         if not species.isdigit():
             continue
-        d = s.sort_datasets('../../output/' + cfg.paxdb_version + '/' + species)
+        d = s.sort_datasets('../../202502/converted/' + species)
         print(d)
 
     print('done')

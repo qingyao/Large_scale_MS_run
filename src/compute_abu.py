@@ -1,18 +1,26 @@
 ## wrapper to compute abu from fragpipe output
-## by the month folder
+## by the year_month_folder
 ### Note: fragpipe transforms column name: replace('-','_')
 import os
 import pandas as pd
 from helper import calculate_stringID as cs
-import glob, yaml
+import glob, yaml, sys
 import subprocess as sbp
 from collections import defaultdict
 from paxdb import spectral_counting as sc
 
-month = '202502'
-paxdb_ver = 'v6.0'
-string_ver = 'v12.0'
-fasta_dir = f'rsc/{paxdb_ver}/fasta'
+with open('../rsc/config.yaml') as f:
+    config = yaml.safe_load(f)
+
+year_month_folder = sys.argv[1]
+if len(sys.argv) > 2 and sys.argv[2] == 'o':
+    overwrite = True
+else:
+    overwrite = False
+
+paxdb_ver = config['PaxDbVersion']
+string_ver = config['StringVersion']
+fasta_dir = f'../rsc/{paxdb_ver}/fasta'
 
 def write_data_file(data_df, out_column, out_file, vals):
 
@@ -25,7 +33,7 @@ def write_data_file(data_df, out_column, out_file, vals):
     # print(data_df.shape)
 
 def get_label_weights(name, labels, root_folder, pxdid, taxID):
-    ### read manifest
+    ### read manifestf
     label_size = {}
     for label in labels:
         curated_fn = os.path.join(root_folder, pxdid, f'{pxdid}-{taxID}-curated.manifest')
@@ -51,6 +59,9 @@ def compute_data_normalized(label_name, data_df, peptide, out_dir, pxdid, root_f
     for label, name in label_name.items():
         name_labels[name].append(label)    
     for name, labels in name_labels.items():
+        out_file = os.path.join(out_dir,f'{pxdid}_{name}.abu')
+        if not overwrite and os.path.isfile(out_file):
+            continue
         if len(labels) == 1:
             label = labels[0]
             wo_norm =  data_df.loc[:,label.replace('-','_')+' Intensity']
@@ -66,7 +77,6 @@ def compute_data_normalized(label_name, data_df, peptide, out_dir, pxdid, root_f
         by_peptide = wo_norm.div(data_df['peptide'], axis = 0)
         
         out_column = name+'_iBAQ_ppm'
-        out_file = os.path.join(out_dir,f'{pxdid}_{name}.abu')
         write_data_file(data_df, out_column, out_file, by_peptide)
 
 def write_si_files(label_name, peptide_table, out_folder, root_folder, pxdid, taxID):
@@ -99,8 +109,8 @@ def write_si_files(label_name, peptide_table, out_folder, root_folder, pxdid, ta
     
     return out_files
 
-root_folder = os.path.join(month, 'fragpipe_processing_output')
-out_folder = os.path.join(month, 'converted')
+root_folder = os.path.join(os.path.pardir, year_month_folder, 'fragpipe_processing_output')
+out_folder = os.path.join(os.path.pardir, year_month_folder, 'converted')
 os.makedirs(out_folder, exist_ok=True)
 
 for pxdid in os.listdir(root_folder):
@@ -160,8 +170,9 @@ for pxdid in os.listdir(root_folder):
         # compute_data_NSAF
         for si_file in si_files:
             abu_file = si_file.replace('.si', '_si') + '.abu'
-            sc.calculate_abundance_and_raw_spectral_counts(si_file,
-                                                        abu_file, 
-                                                        taxID, 
-                                                        fasta_dir, 
-                                                        string_ver)
+            if not os.path.isfile(abu_file) or overwrite:
+                sc.calculate_abundance_and_raw_spectral_counts(si_file,
+                                                            abu_file, 
+                                                            taxID, 
+                                                            fasta_dir, 
+                                                            string_ver)
